@@ -55,6 +55,9 @@ import {
   clearVerificationState,
   consumeVerificationRequest,
   restoreVerificationRequestIfAbsent,
+  getCriticLabel,
+  RALPH_EXTERNAL_CRITIC_LABELS,
+  type RalphExternalCriticMode,
   type VerificationState,
 } from '../ralph/index.js';
 import { applyRalphVerdictShadow } from '../ralph/jev-shadow.js';
@@ -877,7 +880,7 @@ type TranscriptApprovalEntry = {
   };
 };
 
-type ReviewerApprovalPath = 'architect' | 'critic' | 'codex';
+type ReviewerApprovalPath = 'architect' | 'critic' | RalphExternalCriticMode;
 
 const REVIEWER_TASK_TOOL_NAMES = new Set(['Task', 'proxy_Task', 'Agent']);
 const REVIEWER_COMMAND_TOOL_NAMES = new Set(['Bash', 'proxy_Bash']);
@@ -907,9 +910,18 @@ function normalizeReviewerPath(subagentType: unknown): ReviewerApprovalPath | nu
   return null;
 }
 
-function isCodexReviewerCommand(command: unknown): boolean {
-  return typeof command === 'string'
-    && /\bask\s+codex\s+--agent-prompt\s+critic\b/i.test(command);
+const EXTERNAL_REVIEWER_COMMAND_PATTERN = new RegExp(
+  `\\bask\\s+(${Object.keys(RALPH_EXTERNAL_CRITIC_LABELS).join('|')})\\s+--agent-prompt\\s+critic\\b`,
+  'i',
+);
+
+/** The external critic (`omc ask <codex|muse|grok> --agent-prompt critic`) a Bash command runs, if any. */
+function externalReviewerFromCommand(command: unknown): RalphExternalCriticMode | null {
+  if (typeof command !== 'string') {
+    return null;
+  }
+  const match = EXTERNAL_REVIEWER_COMMAND_PATTERN.exec(command);
+  return match ? match[1].toLowerCase() as RalphExternalCriticMode : null;
 }
 
 function extractTranscriptText(content: unknown): string {
@@ -974,8 +986,9 @@ function checkReviewerAuthoredApprovalInMessages(
 
         if (REVIEWER_COMMAND_TOOL_NAMES.has(block.name)) {
           const command = (block.input as Record<string, unknown> | undefined)?.command;
-          if (isCodexReviewerCommand(command) && matchesVerificationReviewerPath('codex', verificationState)) {
-            reviewerToolUses.set(block.id, 'codex');
+          const externalReviewer = externalReviewerFromCommand(command);
+          if (externalReviewer && matchesVerificationReviewerPath(externalReviewer, verificationState)) {
+            reviewerToolUses.set(block.id, externalReviewer);
           }
         }
 
@@ -1357,11 +1370,7 @@ async function checkRalphLoop(
               mode: 'ralph',
             };
           }
-          const criticLabel = criticMode === 'codex'
-            ? 'Codex critic'
-            : criticMode === 'critic'
-              ? 'Critic'
-              : 'Architect';
+          const criticLabel = getCriticLabel(criticMode);
           return {
             shouldBlock: false,
             message: `[RALPH LOOP VERIFIED COMPLETE] ${criticLabel} verified task completion after ${state.iteration} iteration(s). Excellent work!`,
@@ -1544,7 +1553,7 @@ CRITICAL INSTRUCTIONS:
 1. Review your progress and the original task
 ${prdInstruction}
 3. Continue from where you left off
-4. When FULLY complete (after ${state.critic_mode === 'codex' ? 'Codex critic' : state.critic_mode === 'critic' ? 'Critic' : 'Architect'} verification), run \`/oh-my-claudecode:cancel\` to cleanly exit and clean up state files. If cancel fails, report the failure and retry within the same session scope. Cancel all sessions only when the user explicitly requests \`--all\`.
+4. When FULLY complete (after ${getCriticLabel(state.critic_mode)} verification), run \`/oh-my-claudecode:cancel\` to cleanly exit and clean up state files. If cancel fails, report the failure and retry within the same session scope. Cancel all sessions only when the user explicitly requests \`--all\`.
 5. Do NOT stop until the task is truly done
 
 ${newState.prompt ? `Original task: ${truncatePromptForEcho(newState.prompt)}` : ''}

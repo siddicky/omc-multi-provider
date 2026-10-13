@@ -18,6 +18,7 @@ import { resolveSessionStatePath, ensureSessionStateDir, getOmcRoot } from '../.
 import { clearStateFileLocked, clearStateFileLockedIf, writeStateFileLocked, writeStateFileLockedCreateIf, writeStateFileLockedIf } from '../../lib/mode-state-io.js';
 import { formatOmcCliInvocation } from '../../utils/omc-cli-rendering.js';
 import { getPrdGoverningCriteriaRevision, readPrd } from './prd.js';
+import { RALPH_EXTERNAL_CRITIC_LABELS } from './loop.js';
 const DEFAULT_MAX_VERIFICATION_ATTEMPTS = 3;
 const DEFAULT_RALPH_CRITIC_MODE = 'architect';
 function createVerificationRequestId() {
@@ -26,29 +27,34 @@ function createVerificationRequestId() {
 function getCriticMode(mode) {
     return mode ?? DEFAULT_RALPH_CRITIC_MODE;
 }
-function getCriticLabel(mode) {
-    switch (getCriticMode(mode)) {
-        case 'critic':
-            return 'Critic';
-        case 'codex':
-            return 'Codex critic';
-        default:
-            return 'Architect';
+function getExternalCriticLabel(mode) {
+    return RALPH_EXTERNAL_CRITIC_LABELS[mode];
+}
+/** Human-readable reviewer name for a Ralph critic mode ('Architect', 'Critic', 'Codex critic', ...). */
+export function getCriticLabel(mode) {
+    const criticMode = getCriticMode(mode);
+    const externalProvider = getExternalCriticLabel(criticMode);
+    if (externalProvider) {
+        return `${externalProvider} critic`;
     }
+    return criticMode === 'critic' ? 'Critic' : 'Architect';
 }
 function getVerificationAgentStep(mode) {
-    switch (getCriticMode(mode)) {
+    const criticMode = getCriticMode(mode);
+    const externalProvider = getExternalCriticLabel(criticMode);
+    if (externalProvider) {
+        return `1. **Run an external ${externalProvider} critic review**:
+   \`\`\`
+   ${formatOmcCliInvocation(`ask ${criticMode} --agent-prompt critic "<verification prompt covering the task, completion claim, and acceptance criteria>"`)}
+   \`\`\`
+   Use the ${externalProvider} output as the reviewer verdict before deciding pass/fix.`;
+    }
+    switch (criticMode) {
         case 'critic':
             return `1. **Spawn Critic Agent** for verification:
    \`\`\`
    Task(subagent_type="critic", prompt="Critically review this task completion claim...")
    \`\`\``;
-        case 'codex':
-            return `1. **Run an external Codex critic review**:
-   \`\`\`
-   ${formatOmcCliInvocation('ask codex --agent-prompt critic "<verification prompt covering the task, completion claim, and acceptance criteria>"')}
-   \`\`\`
-   Use the Codex output as the reviewer verdict before deciding pass/fix.`;
         default:
             return `1. **Spawn Architect Agent** for verification:
    \`\`\`
@@ -328,7 +334,7 @@ export function detectArchitectApproval(text, expected) {
 export function detectArchitectRejection(text) {
     // Look for explicit rejection patterns
     const rejectionPatterns = [
-        /(architect|critic|codex|reviewer).*?(rejected|found issues|not complete|incomplete)/i,
+        /(architect|critic|codex|\bmuse\b|\bgrok\b|reviewer).*?(rejected|found issues|not complete|incomplete)/i,
         /issues? (found|identified|detected)/i,
         /not yet complete/i,
         /missing.*?(implementation|feature|test)/i,
@@ -338,7 +344,7 @@ export function detectArchitectRejection(text) {
     for (const pattern of rejectionPatterns) {
         if (pattern.test(text)) {
             // Extract feedback (rough heuristic)
-            const feedbackMatch = text.match(/(?:architect|critic|codex|reviewer|feedback|issue|problem|error|bug)[:\s]+([^.]+\.)/i);
+            const feedbackMatch = text.match(/(?:architect|critic|codex|\bmuse\b|\bgrok\b|reviewer|feedback|issue|problem|error|bug)[:\s]+([^.]+\.)/i);
             return {
                 rejected: true,
                 feedback: feedbackMatch ? feedbackMatch[1] : 'Architect found issues with the implementation.'

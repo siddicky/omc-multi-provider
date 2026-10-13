@@ -13,7 +13,7 @@ readRalphState, writeRalphState, restoreRalphStateIfAbsent, clearRalphState, inc
 // Loop control
 createRalphLoopHook, ralphFeedbackGateNotice, 
 // PRD flag helpers
-detectNoPrdFlag, stripNoPrdFlag, detectCriticModeFlag, stripCriticModeFlag, normalizeRalphCriticMode, 
+detectNoPrdFlag, stripNoPrdFlag, detectCriticModeFlag, stripCriticModeFlag, normalizeRalphCriticMode, RALPH_EXTERNAL_CRITIC_LABELS, 
 // Team coordination
 getTeamPhaseDirective, 
 // PRD integration
@@ -53,7 +53,7 @@ readVerificationState, writeVerificationState, clearVerificationState, consumeVe
 // Verification workflow
 startVerification, recordArchitectFeedback, 
 // Prompts & detection
-getArchitectVerificationPrompt, getArchitectRejectionContinuationPrompt, detectArchitectApproval, detectArchitectRejection } from './verifier.js';
+getArchitectVerificationPrompt, getArchitectRejectionContinuationPrompt, detectArchitectApproval, detectArchitectRejection, getCriticLabel } from './verifier.js';
 // ============================================================================
 // Ralph PRD Stale-State Detection & Reconciliation (#3669)
 // ============================================================================

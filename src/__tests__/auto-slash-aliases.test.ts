@@ -5,6 +5,7 @@ import { tmpdir } from 'os';
 
 vi.mock('../team/model-contract.js', () => ({
   isCliAvailable: (agentType: string) => agentType === 'codex',
+  isMuseCliAvailable: () => false,
 }));
 
 const originalCwd = process.cwd();

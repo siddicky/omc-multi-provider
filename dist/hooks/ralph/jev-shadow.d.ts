@@ -20,7 +20,7 @@ export interface RalphVerdictShadowArgs {
     prdContext: string;
     /** Completion-claim summary metadata. */
     claim: string;
-    /** Reviewer mode metadata ('architect' | 'critic' | 'codex'). */
+    /** Reviewer mode metadata ('architect' | 'critic' | 'codex' | 'muse' | 'grok'). */
     criticMode?: string;
     /** Test hook: injected transport. */
     fetchFn?: typeof fetch;

@@ -5,7 +5,9 @@ export interface SkillRuntimeAvailability {
     gemini: boolean;
     grok: boolean;
     antigravity: boolean;
+    muse?: boolean;
 }
-export declare function detectSkillRuntimeAvailability(detector?: (agentType: CliAgentType) => boolean): SkillRuntimeAvailability;
+export type SkillRuntimeProvider = CliAgentType | 'muse';
+export declare function detectSkillRuntimeAvailability(detector?: (agentType: SkillRuntimeProvider) => boolean): SkillRuntimeAvailability;
 export declare function renderSkillRuntimeGuidance(skillName: string, availability?: SkillRuntimeAvailability): string;
 //# sourceMappingURL=runtime-guidance.d.ts.map

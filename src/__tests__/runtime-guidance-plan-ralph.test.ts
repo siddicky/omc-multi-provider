@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CliAgentType } from '../team/model-contract.js';
+import type {
+  SkillRuntimeAvailability,
+  SkillRuntimeProvider,
+} from '../features/builtin-skills/runtime-guidance.js';
 
 const availability = vi.hoisted(() => ({
   claude: true,
@@ -8,10 +12,12 @@ const availability = vi.hoisted(() => ({
   cursor: false,
   grok: false,
   antigravity: false,
+  muse: false,
 }));
 
 vi.mock('../team/model-contract.js', () => ({
   isCliAvailable: (agentType: CliAgentType) => availability[agentType],
+  isMuseCliAvailable: () => availability.muse,
 }));
 
 import {
@@ -25,6 +31,8 @@ describe('runtime-guidance: ralplan/plan/ralph Codex availability', () => {
     availability.codex = false;
     availability.gemini = false;
     availability.cursor = false;
+    availability.grok = false;
+    availability.muse = false;
   });
 
   describe('renderSkillRuntimeGuidance for plan-family skills', () => {
@@ -69,6 +77,66 @@ describe('runtime-guidance: ralplan/plan/ralph Codex availability', () => {
     });
   });
 
+  describe('Muse and Grok critic guidance', () => {
+    const only = (overrides: Partial<SkillRuntimeAvailability>): SkillRuntimeAvailability => ({
+      claude: true,
+      codex: false,
+      gemini: false,
+      grok: false,
+      antigravity: false,
+      muse: false,
+      ...overrides,
+    });
+
+    it.each(['ralplan', 'omc-plan', 'plan'] as const)(
+      'injects Muse and Grok critic guidance for "%s" without Codex',
+      (skillName) => {
+        const guidance = renderSkillRuntimeGuidance(skillName, only({ muse: true, grok: true }));
+        expect(guidance).toContain('## Provider Runtime Availability');
+        expect(guidance).toContain('Muse CLI is installed and available');
+        expect(guidance).toContain('`--critic muse`');
+        expect(guidance).toContain('omc ask muse --agent-prompt critic');
+        expect(guidance).toContain('Grok CLI is installed and available');
+        expect(guidance).toContain('`--critic grok`');
+        expect(guidance).toContain('omc ask grok --agent-prompt critic');
+        expect(guidance).not.toContain('Codex');
+      },
+    );
+
+    it('keeps the Codex architect+critic line and lists every available critic once', () => {
+      const guidance = renderSkillRuntimeGuidance('ralplan', only({ codex: true, muse: true, grok: true }));
+      expect(guidance.match(/## Provider Runtime Availability/g)).toHaveLength(1);
+      expect(guidance).toContain('--architect codex');
+      expect(guidance.indexOf('Codex CLI')).toBeLessThan(guidance.indexOf('Muse CLI'));
+      expect(guidance.indexOf('Muse CLI')).toBeLessThan(guidance.indexOf('Grok CLI'));
+    });
+
+    it('injects ralph --critic=muse / --critic=grok guidance', () => {
+      const guidance = renderSkillRuntimeGuidance('ralph', only({ muse: true, grok: true }));
+      expect(guidance).toContain('`--critic=muse`');
+      expect(guidance).toContain('omc ask muse --agent-prompt critic');
+      expect(guidance).toContain('`--critic=grok`');
+      expect(guidance).toContain('omc ask grok --agent-prompt critic');
+      expect(guidance).not.toContain('--architect');
+    });
+
+    it('renders nothing when no external critic CLI is available', () => {
+      expect(renderSkillRuntimeGuidance('ralplan', only({ gemini: true }))).toBe('');
+      expect(renderSkillRuntimeGuidance('ralph', only({ antigravity: true }))).toBe('');
+    });
+
+    it('asks the detector about muse', () => {
+      const seen: SkillRuntimeProvider[] = [];
+      const result = detectSkillRuntimeAvailability((provider) => {
+        seen.push(provider);
+        return provider === 'muse';
+      });
+      expect(seen).toContain('muse');
+      expect(result.muse).toBe(true);
+      expect(result.codex).toBe(false);
+    });
+  });
+
   describe('unrelated skills are not affected', () => {
     it('does not inject guidance for skills without Codex support', () => {
       availability.codex = true;
@@ -80,7 +148,7 @@ describe('runtime-guidance: ralplan/plan/ralph Codex availability', () => {
 
   describe('detectSkillRuntimeAvailability safety', () => {
     it('returns false for a provider whose detector throws instead of crashing', () => {
-      const throwingDetector = (agentType: CliAgentType) => {
+      const throwingDetector = (agentType: SkillRuntimeProvider) => {
         if (agentType === 'codex') {
           throw new Error(
             'External LLM provider "codex" is blocked by security policy (disableExternalLLM).',

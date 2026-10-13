@@ -181,6 +181,70 @@ describe('Ralph verification flow', () => {
     expect(result.message).toContain('Critic verified task completion');
   });
 
+  describe.each([
+    ['muse', 'Muse'],
+    ['grok', 'Grok'],
+  ] as const)('external %s critic', (mode, label) => {
+    function writeExternalCriticVerification(sessionId: string): void {
+      const sessionDir = join(testDir, '.omc', 'state', 'sessions', sessionId);
+      mkdirSync(sessionDir, { recursive: true });
+      writeRalphState(sessionId, { critic_mode: mode });
+      writeFileSync(join(sessionDir, 'ralph-verification-state.json'), JSON.stringify({
+        pending: true,
+        completion_claim: 'All stories are complete',
+        verification_attempts: 0,
+        max_verification_attempts: 3,
+        requested_at: new Date().toISOString(),
+        original_task: 'Implement issue #1496',
+        critic_mode: mode,
+        request_id: `${mode}-request`,
+      }));
+    }
+
+    function writeBashReviewTranscript(sessionId: string, command: string): void {
+      writeMessagesTranscript(sessionId, [
+        {
+          timestamp: '2026-04-13T12:00:00.000Z',
+          message: { role: 'assistant', content: [{ type: 'tool_use', id: 'toolu-bash-review', name: 'Bash', input: { command } }] },
+        },
+        {
+          timestamp: '2026-04-13T12:00:05.000Z',
+          message: {
+            role: 'user',
+            content: [{
+              type: 'tool_result',
+              tool_use_id: 'toolu-bash-review',
+              content: [{ type: 'text', text: `<ralph-approved critic="${mode}" request-id="${mode}-request">VERIFIED_COMPLETE</ralph-approved>` }],
+            }],
+          },
+        },
+      ]);
+    }
+
+    it(`completes Ralph after an \`omc ask ${mode} --agent-prompt critic\` approval`, async () => {
+      const sessionId = `ralph-approved-${mode}`;
+      writeExternalCriticVerification(sessionId);
+      writeBashReviewTranscript(sessionId, `omc ask ${mode} --agent-prompt critic "verify the completion claim"`);
+
+      const result = await checkPersistentModes(sessionId, testDir);
+
+      expect(result.shouldBlock).toBe(false);
+      expect(result.message).toContain(`${label} critic verified task completion`);
+    });
+
+    it(`does not accept a ${mode}-mode approval produced by a different external critic`, async () => {
+      const sessionId = `ralph-wrong-reviewer-${mode}`;
+      writeExternalCriticVerification(sessionId);
+      writeBashReviewTranscript(sessionId, 'omc ask codex --agent-prompt critic "verify the completion claim"');
+
+      const result = await checkPersistentModes(sessionId, testDir);
+
+      expect(result.shouldBlock).toBe(true);
+      expect(result.message).toContain(`${label.toUpperCase()} CRITIC VERIFICATION REQUIRED`);
+      expect(result.message).toContain(`ask ${mode} --agent-prompt critic`);
+    });
+  });
+
   it('preserves replacement Ralph, Ultrawork, and verification generations after request consumption', async () => {
     const sessionId = 'ralph-terminal-generation-replacement';
     const sessionDir = join(testDir, '.omc', 'state', 'sessions', sessionId);

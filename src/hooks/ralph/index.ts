@@ -27,6 +27,7 @@ export {
   detectCriticModeFlag,
   stripCriticModeFlag,
   normalizeRalphCriticMode,
+  RALPH_EXTERNAL_CRITIC_LABELS,
 
   // Team coordination
   getTeamPhaseDirective,
@@ -44,6 +45,7 @@ export {
   // Types
   type RalphLoopState,
   type RalphCriticMode,
+  type RalphExternalCriticMode,
   type RalphLoopOptions,
   type RalphLoopHook,
   type PRD,
@@ -165,6 +167,7 @@ export {
   getArchitectRejectionContinuationPrompt,
   detectArchitectApproval,
   detectArchitectRejection,
+  getCriticLabel,
 
   // Types
   type VerificationState

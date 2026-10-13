@@ -1,7 +1,7 @@
 ---
 name: ralph
 description: Self-referential loop until task completion with configurable verification reviewer
-argument-hint: "[--no-deslop] [--critic=architect|critic|codex] <task description>"
+argument-hint: "[--no-deslop] [--critic=architect|critic|codex|muse|grok] <task description>"
 level: 4
 ---
 
@@ -54,7 +54,7 @@ By default, ralph operates in PRD mode. A scaffold `prd.json` is auto-generated 
 
 **Deslop opt-out:** If `{{PROMPT}}` contains `--no-deslop`, skip the mandatory post-review deslop pass entirely. Use this only when the cleanup pass is intentionally out of scope for the run.
 
-**Reviewer selection:** Pass `--critic=architect`, `--critic=critic`, or `--critic=codex` in the Ralph prompt to choose the completion reviewer for that run. `architect` remains the default.
+**Reviewer selection:** Pass `--critic=architect`, `--critic=critic`, `--critic=codex`, `--critic=muse`, or `--critic=grok` in the Ralph prompt to choose the completion reviewer for that run. `architect` remains the default. `codex`, `muse`, and `grok` are external critics run through `omc ask <provider>`.
 
 **Stale-state detection & reconciliation (#3669):** If a PRD is left unfinished by an abnormal/non-Step 8 exit (crash, force-kill, cancel before `/oh-my-claudecode:cancel`, session end), Ralph surfaces an explicit `[STALE PRD WARNING]` at startup/resume, in the continuation context, and at session end — with unfinished counts, last-touched age, and stale-pointer signals (PRD `branchName` merged/gone). Completion is NEVER inferred from PR/branch/merge status alone; git state is a warning signal only. A story is auto-reconciled to `passes: true` ONLY when the PRD carries configured observable evidence and every check passes:
 
@@ -158,7 +158,7 @@ Rules:
    - Standard changes: STANDARD tier (architect-medium / Sonnet)
    - > 20 files or security/architectural changes: THOROUGH tier (architect / Opus)
    - If `--critic=critic`, use the Claude `critic` agent for the approval pass
-   - If `--critic=codex`, run `omc ask codex --agent-prompt critic "..."` for the approval pass. The Codex critic prompt MUST include:
+   - If `--critic=codex`, `--critic=muse`, or `--critic=grok`, run `omc ask <codex|muse|grok> --agent-prompt critic "..."` (the provider named by the flag) for the approval pass. The external critic prompt MUST include:
      1. The full list of acceptance criteria from prd.json for verification
      2. A directive to evaluate whether the implementation is **OPTIMAL** — not just correct, but whether there exists a meaningfully better approach (simpler, faster, more maintainable) that the implementation missed
      3. A directive to review **all code related to the changes** (callers, callees, shared types, adjacent modules), not only the files directly modified
@@ -192,7 +192,7 @@ Rules:
 
 - Use `Task(subagent_type="oh-my-claudecode:architect", ...)` for architect verification cross-checks when changes are security-sensitive, architectural, or involve complex multi-system integration
 - Use `Task(subagent_type="oh-my-claudecode:critic", ...)` when `--critic=critic`
-- Use `omc ask codex --agent-prompt critic "..."` when `--critic=codex`. Construct the prompt to include: (a) prd.json acceptance criteria, (b) files changed + related files, (c) explicit optimality question: "Is there a meaningfully simpler, faster, or more maintainable approach that achieves the same acceptance criteria?"
+- Use `omc ask <codex|muse|grok> --agent-prompt critic "..."` when `--critic=codex`, `--critic=muse`, or `--critic=grok`. Construct the prompt to include: (a) prd.json acceptance criteria, (b) files changed + related files, (c) explicit optimality question: "Is there a meaningfully simpler, faster, or more maintainable approach that achieves the same acceptance criteria?"
 - Skip architect consultation for simple feature additions, well-tested changes, or time-critical verification
 - Proceed with architect agent verification alone -- never block on unavailable tools
 - Use `state_write` / `state_read` for ralph mode state persistence between iterations

@@ -63,6 +63,11 @@ export declare const _testInternals: {
 export declare function shouldUseClaudeBareMode(env?: NodeJS.ProcessEnv): boolean;
 export declare function getContract(agentType: CliAgentType): CliAgentContract;
 export declare function isCliAvailable(agentType: CliAgentType): boolean;
+/**
+ * Muse runs only as an `omc ask` advisor/critic, not as a team worker, so it has
+ * no CliAgentContract; probe its binary the same way as the worker CLIs.
+ */
+export declare function isMuseCliAvailable(): boolean;
 export declare function validateCliAvailable(agentType: CliAgentType): void;
 export declare function resolveValidatedBinaryPath(agentType: CliAgentType): string;
 export declare function buildLaunchArgs(agentType: CliAgentType, config: WorkerLaunchConfig): string[];

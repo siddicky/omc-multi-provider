@@ -12,7 +12,7 @@
  * 5. If architect finds flaws -> continue ralph with architect feedback
  */
 import { type UserStory } from './prd.js';
-import type { RalphCriticMode } from './loop.js';
+import { type RalphCriticMode } from './loop.js';
 export interface VerificationState {
     /** Whether verification is pending */
     pending: boolean;
@@ -41,6 +41,8 @@ export interface VerificationState {
     /** Canonical criteria revision submitted to the reviewer for a story. */
     criteria_revision?: string;
 }
+/** Human-readable reviewer name for a Ralph critic mode ('Architect', 'Critic', 'Codex critic', ...). */
+export declare function getCriticLabel(mode?: RalphCriticMode): string;
 /**
  * Read verification state
  * @param sessionId - When provided, reads from session-scoped path only (no legacy fallback)

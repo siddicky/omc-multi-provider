@@ -369,9 +369,27 @@ function resolveBinaryPath(binary: string): string {
 }
 
 export function isCliAvailable(agentType: CliAgentType): boolean {
-  const contract = getContract(agentType);
+  return isBinaryAvailable(getContract(agentType).binary);
+}
+
+/**
+ * Muse runs only as an `omc ask` advisor/critic, not as a team worker, so it has
+ * no CliAgentContract; probe its binary the same way as the worker CLIs.
+ */
+export function isMuseCliAvailable(): boolean {
+  if (isExternalLLMDisabled()) {
+    // Same contract as getContract(): callers like safeDetect treat the throw as unavailable.
+    throw new Error(
+      `External LLM provider "muse" is blocked by security policy (disableExternalLLM). ` +
+      `Only "claude" is allowed in the current security configuration.`
+    );
+  }
+  return isBinaryAvailable('muse');
+}
+
+function isBinaryAvailable(binary: string): boolean {
   try {
-    const resolvedBinary = resolveBinaryPath(contract.binary);
+    const resolvedBinary = resolveBinaryPath(binary);
     if (process.platform === 'win32' && /\.(cmd|bat)$/i.test(resolvedBinary)) {
       const comspec = process.env.COMSPEC || 'cmd.exe';
       const result = spawnSync(comspec, ['/d', '/s', '/c', `"${resolvedBinary}" --version`], { timeout: 5000 });

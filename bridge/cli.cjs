@@ -39324,7 +39324,7 @@ function shouldCompleteByPrd(directory, sessionId) {
   const status = getPrdCompletionStatus(directory, sessionId);
   return status.hasPrd && status.allComplete;
 }
-var import_child_process12, import_path34, RALPH_CRITIC_MODES, DEFAULT_MAX_ITERATIONS, DEFAULT_RALPH_CRITIC_MODE;
+var import_child_process12, import_path34, RALPH_CRITIC_MODES, RALPH_EXTERNAL_CRITIC_LABELS, DEFAULT_MAX_ITERATIONS, DEFAULT_RALPH_CRITIC_MODE;
 var init_loop = __esm({
   "src/hooks/ralph/loop.ts"() {
     "use strict";
@@ -39335,7 +39335,12 @@ var init_loop = __esm({
     init_stale_prd();
     init_progress();
     init_state();
-    RALPH_CRITIC_MODES = ["architect", "critic", "codex"];
+    RALPH_CRITIC_MODES = ["architect", "critic", "codex", "muse", "grok"];
+    RALPH_EXTERNAL_CRITIC_LABELS = {
+      codex: "Codex",
+      muse: "Muse",
+      grok: "Grok"
+    };
     DEFAULT_MAX_ITERATIONS = 10;
     DEFAULT_RALPH_CRITIC_MODE = "architect";
   }
@@ -39399,29 +39404,33 @@ function createVerificationRequestId() {
 function getCriticMode(mode) {
   return mode ?? DEFAULT_RALPH_CRITIC_MODE2;
 }
+function getExternalCriticLabel(mode) {
+  return RALPH_EXTERNAL_CRITIC_LABELS[mode];
+}
 function getCriticLabel(mode) {
-  switch (getCriticMode(mode)) {
-    case "critic":
-      return "Critic";
-    case "codex":
-      return "Codex critic";
-    default:
-      return "Architect";
+  const criticMode = getCriticMode(mode);
+  const externalProvider = getExternalCriticLabel(criticMode);
+  if (externalProvider) {
+    return `${externalProvider} critic`;
   }
+  return criticMode === "critic" ? "Critic" : "Architect";
 }
 function getVerificationAgentStep(mode) {
-  switch (getCriticMode(mode)) {
+  const criticMode = getCriticMode(mode);
+  const externalProvider = getExternalCriticLabel(criticMode);
+  if (externalProvider) {
+    return `1. **Run an external ${externalProvider} critic review**:
+   \`\`\`
+   ${formatOmcCliInvocation(`ask ${criticMode} --agent-prompt critic "<verification prompt covering the task, completion claim, and acceptance criteria>"`)}
+   \`\`\`
+   Use the ${externalProvider} output as the reviewer verdict before deciding pass/fix.`;
+  }
+  switch (criticMode) {
     case "critic":
       return `1. **Spawn Critic Agent** for verification:
    \`\`\`
    Task(subagent_type="critic", prompt="Critically review this task completion claim...")
    \`\`\``;
-    case "codex":
-      return `1. **Run an external Codex critic review**:
-   \`\`\`
-   ${formatOmcCliInvocation('ask codex --agent-prompt critic "<verification prompt covering the task, completion claim, and acceptance criteria>"')}
-   \`\`\`
-   Use the Codex output as the reviewer verdict before deciding pass/fix.`;
     default:
       return `1. **Spawn Architect Agent** for verification:
    \`\`\`
@@ -39664,7 +39673,7 @@ function detectArchitectApproval(text, expected) {
 }
 function detectArchitectRejection(text) {
   const rejectionPatterns = [
-    /(architect|critic|codex|reviewer).*?(rejected|found issues|not complete|incomplete)/i,
+    /(architect|critic|codex|\bmuse\b|\bgrok\b|reviewer).*?(rejected|found issues|not complete|incomplete)/i,
     /issues? (found|identified|detected)/i,
     /not yet complete/i,
     /missing.*?(implementation|feature|test)/i,
@@ -39673,7 +39682,7 @@ function detectArchitectRejection(text) {
   ];
   for (const pattern of rejectionPatterns) {
     if (pattern.test(text)) {
-      const feedbackMatch = text.match(/(?:architect|critic|codex|reviewer|feedback|issue|problem|error|bug)[:\s]+([^.]+\.)/i);
+      const feedbackMatch = text.match(/(?:architect|critic|codex|\bmuse\b|\bgrok\b|reviewer|feedback|issue|problem|error|bug)[:\s]+([^.]+\.)/i);
       return {
         rejected: true,
         feedback: feedbackMatch ? feedbackMatch[1] : "Architect found issues with the implementation."
@@ -39693,6 +39702,7 @@ var init_verifier = __esm({
     init_mode_state_io();
     init_omc_cli_rendering();
     init_prd();
+    init_loop();
     DEFAULT_MAX_VERIFICATION_ATTEMPTS = 3;
     DEFAULT_RALPH_CRITIC_MODE2 = "architect";
   }
@@ -39709,6 +39719,7 @@ __export(ralph_exports, {
   PRD_FILENAME: () => PRD_FILENAME,
   PRD_RECONCILIATION_AUDIT_FILENAME: () => PRD_RECONCILIATION_AUDIT_FILENAME,
   PROGRESS_FILENAME: () => PROGRESS_FILENAME,
+  RALPH_EXTERNAL_CRITIC_LABELS: () => RALPH_EXTERNAL_CRITIC_LABELS,
   addPattern: () => addPattern2,
   amendCriterion: () => amendCriterion,
   appendProgress: () => appendProgress,
@@ -39740,6 +39751,7 @@ __export(ralph_exports, {
   formatStory: () => formatStory,
   getArchitectRejectionContinuationPrompt: () => getArchitectRejectionContinuationPrompt,
   getArchitectVerificationPrompt: () => getArchitectVerificationPrompt,
+  getCriticLabel: () => getCriticLabel,
   getLegacyStatePrdPath: () => getLegacyStatePrdPath,
   getNextStory: () => getNextStory,
   getOmcPrdPath: () => getOmcPrdPath,
@@ -54983,8 +54995,12 @@ function normalizeReviewerPath(subagentType) {
   }
   return null;
 }
-function isCodexReviewerCommand(command) {
-  return typeof command === "string" && /\bask\s+codex\s+--agent-prompt\s+critic\b/i.test(command);
+function externalReviewerFromCommand(command) {
+  if (typeof command !== "string") {
+    return null;
+  }
+  const match = EXTERNAL_REVIEWER_COMMAND_PATTERN.exec(command);
+  return match ? match[1].toLowerCase() : null;
 }
 function extractTranscriptText(content) {
   if (typeof content === "string") {
@@ -55032,8 +55048,9 @@ function checkReviewerAuthoredApprovalInMessages(transcriptPath, verificationSta
         }
         if (REVIEWER_COMMAND_TOOL_NAMES.has(block.name)) {
           const command = block.input?.command;
-          if (isCodexReviewerCommand(command) && matchesVerificationReviewerPath("codex", verificationState)) {
-            reviewerToolUses.set(block.id, "codex");
+          const externalReviewer = externalReviewerFromCommand(command);
+          if (externalReviewer && matchesVerificationReviewerPath(externalReviewer, verificationState)) {
+            reviewerToolUses.set(block.id, externalReviewer);
           }
         }
         continue;
@@ -55302,7 +55319,7 @@ async function checkRalphLoop(sessionId, directory, cancelInProgress) {
                 mode: "ralph"
               };
             }
-            const criticLabel = criticMode === "codex" ? "Codex critic" : criticMode === "critic" ? "Critic" : "Architect";
+            const criticLabel = getCriticLabel(criticMode);
             return {
               shouldBlock: false,
               message: `[RALPH LOOP VERIFIED COMPLETE] ${criticLabel} verified task completion after ${state.iteration} iteration(s). Excellent work!`,
@@ -55447,7 +55464,7 @@ CRITICAL INSTRUCTIONS:
 1. Review your progress and the original task
 ${prdInstruction}
 3. Continue from where you left off
-4. When FULLY complete (after ${state.critic_mode === "codex" ? "Codex critic" : state.critic_mode === "critic" ? "Critic" : "Architect"} verification), run \`/oh-my-claudecode:cancel\` to cleanly exit and clean up state files. If cancel fails, report the failure and retry within the same session scope. Cancel all sessions only when the user explicitly requests \`--all\`.
+4. When FULLY complete (after ${getCriticLabel(state.critic_mode)} verification), run \`/oh-my-claudecode:cancel\` to cleanly exit and clean up state files. If cancel fails, report the failure and retry within the same session scope. Cancel all sessions only when the user explicitly requests \`--all\`.
 5. Do NOT stop until the task is truly done
 
 ${newState.prompt ? `Original task: ${truncatePromptForEcho(newState.prompt)}` : ""}
@@ -56062,7 +56079,7 @@ function createHookOutput(result) {
     message: result.message || void 0
   };
 }
-var import_crypto20, import_fs64, import_path75, CANCEL_SIGNAL_TTL_MS2, CANCEL_SIGNAL_CLOCK_SKEW_MS, STALE_STATE_THRESHOLD_MS, PENDING_ASYNC_STATE_STALE_MS, OVERSIZE_TOOL_RESULT_REDIRECT_STOP_MAX, OVERSIZE_TOOL_RESULT_REDIRECT_STOP_TTL_MS, TERMINAL_WORKFLOW_SLOT_MODES, TERMINAL_WORKFLOW_PHASES, todoContinuationAttempts, TRANSCRIPT_TAIL_BYTES, CRITICAL_CONTEXT_STOP_PERCENT, RALPLAN_TERMINAL_PHASES, REVIEWER_TASK_TOOL_NAMES, REVIEWER_COMMAND_TOOL_NAMES, AWAITING_CONFIRMATION_TTL_MS, THINKING_ONLY_STREAK_BREAKER, THINKING_ONLY_STREAK_MAX, THINKING_ONLY_STREAK_TTL_MS, THINKING_ONLY_STREAK_BAILOUT_MESSAGE, TEAM_PIPELINE_STOP_BLOCKER_MAX, TEAM_PIPELINE_STOP_BLOCKER_TTL_MS, RALPLAN_STOP_BLOCKER_MAX, RALPLAN_STOP_BLOCKER_TTL_MS, RALPLAN_ACTIVE_AGENT_RECENCY_WINDOW_MS;
+var import_crypto20, import_fs64, import_path75, CANCEL_SIGNAL_TTL_MS2, CANCEL_SIGNAL_CLOCK_SKEW_MS, STALE_STATE_THRESHOLD_MS, PENDING_ASYNC_STATE_STALE_MS, OVERSIZE_TOOL_RESULT_REDIRECT_STOP_MAX, OVERSIZE_TOOL_RESULT_REDIRECT_STOP_TTL_MS, TERMINAL_WORKFLOW_SLOT_MODES, TERMINAL_WORKFLOW_PHASES, todoContinuationAttempts, TRANSCRIPT_TAIL_BYTES, CRITICAL_CONTEXT_STOP_PERCENT, RALPLAN_TERMINAL_PHASES, REVIEWER_TASK_TOOL_NAMES, REVIEWER_COMMAND_TOOL_NAMES, EXTERNAL_REVIEWER_COMMAND_PATTERN, AWAITING_CONFIRMATION_TTL_MS, THINKING_ONLY_STREAK_BREAKER, THINKING_ONLY_STREAK_MAX, THINKING_ONLY_STREAK_TTL_MS, THINKING_ONLY_STREAK_BAILOUT_MESSAGE, TEAM_PIPELINE_STOP_BLOCKER_MAX, TEAM_PIPELINE_STOP_BLOCKER_TTL_MS, RALPLAN_STOP_BLOCKER_MAX, RALPLAN_STOP_BLOCKER_TTL_MS, RALPLAN_ACTIVE_AGENT_RECENCY_WINDOW_MS;
 var init_persistent_mode = __esm({
   "src/hooks/persistent-mode/index.ts"() {
     "use strict";
@@ -56128,6 +56145,10 @@ var init_persistent_mode = __esm({
     ]);
     REVIEWER_TASK_TOOL_NAMES = /* @__PURE__ */ new Set(["Task", "proxy_Task", "Agent"]);
     REVIEWER_COMMAND_TOOL_NAMES = /* @__PURE__ */ new Set(["Bash", "proxy_Bash"]);
+    EXTERNAL_REVIEWER_COMMAND_PATTERN = new RegExp(
+      `\\bask\\s+(${Object.keys(RALPH_EXTERNAL_CRITIC_LABELS).join("|")})\\s+--agent-prompt\\s+critic\\b`,
+      "i"
+    );
     AWAITING_CONFIRMATION_TTL_MS = 2 * 60 * 1e3;
     THINKING_ONLY_STREAK_BREAKER = "thinking-only-streak";
     THINKING_ONLY_STREAK_MAX = 3;
@@ -67790,7 +67811,10 @@ var init_skill_resources = __esm({
 });
 
 // src/features/builtin-skills/runtime-guidance.ts
-function detectSkillRuntimeAvailability(detector = isCliAvailable) {
+function isSkillRuntimeProviderAvailable(provider) {
+  return provider === "muse" ? isMuseCliAvailable() : isCliAvailable(provider);
+}
+function detectSkillRuntimeAvailability(detector = isSkillRuntimeProviderAvailable) {
   const safeDetect = (agentType) => {
     try {
       return detector(agentType);
@@ -67803,28 +67827,34 @@ function detectSkillRuntimeAvailability(detector = isCliAvailable) {
     codex: safeDetect("codex"),
     gemini: safeDetect("gemini"),
     grok: safeDetect("grok"),
-    antigravity: safeDetect("antigravity")
+    antigravity: safeDetect("antigravity"),
+    muse: safeDetect("muse")
   };
+}
+function availableExternalCritics(availability) {
+  return EXTERNAL_CRITIC_PROVIDERS.filter(({ key }) => availability[key] === true);
 }
 function normalizeSkillName(skillName) {
   return skillName.trim().toLowerCase();
 }
 function renderPlanRuntimeGuidance(availability) {
-  if (!availability.codex) {
+  const critics = availableExternalCritics(availability);
+  if (critics.length === 0) {
     return "";
   }
   return [
     "## Provider Runtime Availability",
-    'Codex CLI is installed and available. When `--architect codex` or `--critic codex` flags are present, use `omc ask codex --agent-prompt <role> "<prompt>"` for those passes. Do NOT report Codex as unavailable.'
+    ...critics.map(({ key, label }) => key === "codex" ? 'Codex CLI is installed and available. When `--architect codex` or `--critic codex` flags are present, use `omc ask codex --agent-prompt <role> "<prompt>"` for those passes. Do NOT report Codex as unavailable.' : `${label} CLI is installed and available. When the \`--critic ${key}\` flag is present, use \`omc ask ${key} --agent-prompt critic "<prompt>"\` for the Critic pass. Do NOT report ${label} as unavailable.`)
   ].join("\n");
 }
 function renderRalphRuntimeGuidance(availability) {
-  if (!availability.codex) {
+  const critics = availableExternalCritics(availability);
+  if (critics.length === 0) {
     return "";
   }
   return [
     "## Provider Runtime Availability",
-    'Codex CLI is installed and available. When `--critic=codex` is set, use `omc ask codex --agent-prompt critic "<prompt>"` for the approval pass. Do NOT report Codex as unavailable.'
+    ...critics.map(({ key, label }) => `${label} CLI is installed and available. When \`--critic=${key}\` is set, use \`omc ask ${key} --agent-prompt critic "<prompt>"\` for the approval pass. Do NOT report ${label} as unavailable.`)
   ].join("\n");
 }
 function renderDeepInterviewRuntimeGuidance(availability) {
@@ -67856,10 +67886,16 @@ function renderSkillRuntimeGuidance(skillName, availability) {
       return "";
   }
 }
+var EXTERNAL_CRITIC_PROVIDERS;
 var init_runtime_guidance = __esm({
   "src/features/builtin-skills/runtime-guidance.ts"() {
     "use strict";
     init_model_contract();
+    EXTERNAL_CRITIC_PROVIDERS = [
+      { key: "codex", label: "Codex" },
+      { key: "muse", label: "Muse" },
+      { key: "grok", label: "Grok" }
+    ];
   }
 });
 
@@ -68267,9 +68303,19 @@ function resolveBinaryPath(binary) {
   }
 }
 function isCliAvailable(agentType) {
-  const contract = getContract(agentType);
+  return isBinaryAvailable(getContract(agentType).binary);
+}
+function isMuseCliAvailable() {
+  if (isExternalLLMDisabled()) {
+    throw new Error(
+      `External LLM provider "muse" is blocked by security policy (disableExternalLLM). Only "claude" is allowed in the current security configuration.`
+    );
+  }
+  return isBinaryAvailable("muse");
+}
+function isBinaryAvailable(binary) {
   try {
-    const resolvedBinary = resolveBinaryPath(contract.binary);
+    const resolvedBinary = resolveBinaryPath(binary);
     if (process.platform === "win32" && /\.(cmd|bat)$/i.test(resolvedBinary)) {
       const comspec = process.env.COMSPEC || "cmd.exe";
       const result2 = (0, import_child_process26.spawnSync)(comspec, ["/d", "/s", "/c", `"${resolvedBinary}" --version`], { timeout: 5e3 });
@@ -118883,7 +118929,7 @@ function getPromptText(input) {
   return "";
 }
 function isExplicitAskSlashInvocation(promptText) {
-  return /^\s*\/(?:oh-my-claudecode:)?ask\s+(?:claude|codex|gemini|antigravity|agy|grok|cursor)\b/i.test(promptText);
+  return /^\s*\/(?:oh-my-claudecode:)?ask\s+(?:claude|codex|gemini|antigravity|agy|grok|cursor|muse)\b/i.test(promptText);
 }
 function activateRalplanStartupState(directory, sessionId) {
   const now = (/* @__PURE__ */ new Date()).toISOString();
@@ -130655,14 +130701,14 @@ var import_path161 = require("path");
 var import_url20 = require("url");
 init_security_config();
 var ASK_USAGE = [
-  "Usage: omc ask <claude|codex|gemini|antigravity|grok|cursor> <question or task>",
-  '   or: omc ask <claude|codex|gemini|antigravity|grok|cursor> -p "<prompt>"',
-  '   or: omc ask <claude|codex|gemini|antigravity|grok|cursor> --print "<prompt>"',
-  '   or: omc ask <claude|codex|gemini|antigravity|grok|cursor> --prompt "<prompt>"',
-  '   or: omc ask <claude|codex|gemini|antigravity|grok|cursor> --agent-prompt <role> "<prompt>"',
-  '   or: omc ask <claude|codex|gemini|antigravity|grok|cursor> --agent-prompt=<role> --prompt "<prompt>"'
+  "Usage: omc ask <claude|codex|gemini|antigravity|grok|cursor|muse> <question or task>",
+  '   or: omc ask <claude|codex|gemini|antigravity|grok|cursor|muse> -p "<prompt>"',
+  '   or: omc ask <claude|codex|gemini|antigravity|grok|cursor|muse> --print "<prompt>"',
+  '   or: omc ask <claude|codex|gemini|antigravity|grok|cursor|muse> --prompt "<prompt>"',
+  '   or: omc ask <claude|codex|gemini|antigravity|grok|cursor|muse> --agent-prompt <role> "<prompt>"',
+  '   or: omc ask <claude|codex|gemini|antigravity|grok|cursor|muse> --agent-prompt=<role> --prompt "<prompt>"'
 ].join("\n");
-var ASK_PROVIDERS = ["claude", "codex", "gemini", "antigravity", "grok", "cursor"];
+var ASK_PROVIDERS = ["claude", "codex", "gemini", "antigravity", "grok", "cursor", "muse"];
 var ASK_PROVIDER_SET = new Set(ASK_PROVIDERS);
 var ASK_AGENT_PROMPT_FLAG = "--agent-prompt";
 var SAFE_ROLE_PATTERN = /^[a-z][a-z0-9-]*$/;

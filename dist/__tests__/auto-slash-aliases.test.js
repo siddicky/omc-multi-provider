@@ -4,6 +4,7 @@ import { join } from 'path';
 import { tmpdir } from 'os';
 vi.mock('../team/model-contract.js', () => ({
     isCliAvailable: (agentType) => agentType === 'codex',
+    isMuseCliAvailable: () => false,
 }));
 const originalCwd = process.cwd();
 const originalPluginRoot = process.env.CLAUDE_PLUGIN_ROOT;

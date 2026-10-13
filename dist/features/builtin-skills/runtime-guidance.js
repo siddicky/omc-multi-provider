@@ -1,5 +1,18 @@
-import { isCliAvailable } from '../../team/model-contract.js';
-export function detectSkillRuntimeAvailability(detector = isCliAvailable) {
+import { isCliAvailable, isMuseCliAvailable } from '../../team/model-contract.js';
+/**
+ * External CLIs that `omc ask` can run as the Critic pass, in display order.
+ * Keep in sync with RALPH_EXTERNAL_CRITIC_LABELS in src/hooks/ralph/loop.ts
+ * (kept separate so features/ does not import hooks/).
+ */
+const EXTERNAL_CRITIC_PROVIDERS = [
+    { key: 'codex', label: 'Codex' },
+    { key: 'muse', label: 'Muse' },
+    { key: 'grok', label: 'Grok' },
+];
+function isSkillRuntimeProviderAvailable(provider) {
+    return provider === 'muse' ? isMuseCliAvailable() : isCliAvailable(provider);
+}
+export function detectSkillRuntimeAvailability(detector = isSkillRuntimeProviderAvailable) {
     const safeDetect = (agentType) => {
         try {
             return detector(agentType);
@@ -14,27 +27,35 @@ export function detectSkillRuntimeAvailability(detector = isCliAvailable) {
         gemini: safeDetect('gemini'),
         grok: safeDetect('grok'),
         antigravity: safeDetect('antigravity'),
+        muse: safeDetect('muse'),
     };
+}
+function availableExternalCritics(availability) {
+    return EXTERNAL_CRITIC_PROVIDERS.filter(({ key }) => availability[key] === true);
 }
 function normalizeSkillName(skillName) {
     return skillName.trim().toLowerCase();
 }
 function renderPlanRuntimeGuidance(availability) {
-    if (!availability.codex) {
+    const critics = availableExternalCritics(availability);
+    if (critics.length === 0) {
         return '';
     }
     return [
         '## Provider Runtime Availability',
-        'Codex CLI is installed and available. When `--architect codex` or `--critic codex` flags are present, use `omc ask codex --agent-prompt <role> "<prompt>"` for those passes. Do NOT report Codex as unavailable.',
+        ...critics.map(({ key, label }) => key === 'codex'
+            ? 'Codex CLI is installed and available. When `--architect codex` or `--critic codex` flags are present, use `omc ask codex --agent-prompt <role> "<prompt>"` for those passes. Do NOT report Codex as unavailable.'
+            : `${label} CLI is installed and available. When the \`--critic ${key}\` flag is present, use \`omc ask ${key} --agent-prompt critic "<prompt>"\` for the Critic pass. Do NOT report ${label} as unavailable.`),
     ].join('\n');
 }
 function renderRalphRuntimeGuidance(availability) {
-    if (!availability.codex) {
+    const critics = availableExternalCritics(availability);
+    if (critics.length === 0) {
         return '';
     }
     return [
         '## Provider Runtime Availability',
-        'Codex CLI is installed and available. When `--critic=codex` is set, use `omc ask codex --agent-prompt critic "<prompt>"` for the approval pass. Do NOT report Codex as unavailable.',
+        ...critics.map(({ key, label }) => `${label} CLI is installed and available. When \`--critic=${key}\` is set, use \`omc ask ${key} --agent-prompt critic "<prompt>"\` for the approval pass. Do NOT report ${label} as unavailable.`),
     ].join('\n');
 }
 function renderDeepInterviewRuntimeGuidance(availability) {

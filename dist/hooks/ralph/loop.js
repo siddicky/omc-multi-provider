@@ -16,7 +16,16 @@ import { ensurePrdForStartup, findPrdPath, readPrd, getPrdStatus, formatNextStor
 import { detectStalePrd, formatStalePrdWarning, reconcileStalePrdForStartup, } from "./stale-prd.js";
 import { findProgressPath, getProgressContext, appendProgress, initProgress, addPattern, } from "./progress.js";
 import { readTeamPipelineState } from "../team-pipeline/state.js";
-export const RALPH_CRITIC_MODES = ['architect', 'critic', 'codex'];
+export const RALPH_CRITIC_MODES = ['architect', 'critic', 'codex', 'muse', 'grok'];
+/**
+ * Critic modes that run an external CLI via `omc ask <mode> --agent-prompt critic`, with display labels.
+ * Keep in sync with EXTERNAL_CRITIC_PROVIDERS in src/features/builtin-skills/runtime-guidance.ts.
+ */
+export const RALPH_EXTERNAL_CRITIC_LABELS = {
+    codex: 'Codex',
+    muse: 'Muse',
+    grok: 'Grok',
+};
 /**
  * The startup line that makes the feedback gate non-optional for executors
  * (#45). Skill text alone lost to executor improvisation in live smokes; this

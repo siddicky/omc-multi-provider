@@ -17,7 +17,7 @@ import { getClaudeConfigDir } from '../../utils/config-dir.js';
 import { getGlobalOmcConfigCandidates } from '../../utils/paths.js';
 import { resolveToWorktreeRoot, resolveSessionStatePath, resolveStatePath, getOmcRoot } from '../../lib/worktree-paths.js';
 import { captureModeStateCleanup, captureStateFileGeneration, clearModeStateFile, clearStateFileLockedIf, canClearStateForSession, readModeState, readModeStateWithMeta, recoverEmergencyStateFile, writeModeState, withStateFileMutationLock, } from '../../lib/mode-state-io.js';
-import { readRalphState, writeRalphState, restoreRalphStateIfAbsent, incrementRalphIteration, clearRalphState, findPrdPath, getPrdCompletionStatus, getRalphContext, readPrd, getStory, markStoryIncomplete, consumeStoryArchitectApproval, consumeCompletionArchitectApproval, getPrdGoverningCriteriaRevision, readVerificationState, startVerification, recordArchitectFeedback, getArchitectVerificationPrompt, getArchitectRejectionContinuationPrompt, detectArchitectApproval, detectArchitectRejection, clearVerificationState, consumeVerificationRequest, restoreVerificationRequestIfAbsent, } from '../ralph/index.js';
+import { readRalphState, writeRalphState, restoreRalphStateIfAbsent, incrementRalphIteration, clearRalphState, findPrdPath, getPrdCompletionStatus, getRalphContext, readPrd, getStory, markStoryIncomplete, consumeStoryArchitectApproval, consumeCompletionArchitectApproval, getPrdGoverningCriteriaRevision, readVerificationState, startVerification, recordArchitectFeedback, getArchitectVerificationPrompt, getArchitectRejectionContinuationPrompt, detectArchitectApproval, detectArchitectRejection, clearVerificationState, consumeVerificationRequest, restoreVerificationRequestIfAbsent, getCriticLabel, RALPH_EXTERNAL_CRITIC_LABELS, } from '../ralph/index.js';
 import { applyRalphVerdictShadow } from '../ralph/jev-shadow.js';
 import { checkIncompleteTodos, getNextPendingTodo, isUserAbort, isContextLimitStop, isRateLimitStop, isExplicitCancelCommand, isAuthenticationError, isScheduledWakeupStop, isOversizeToolResultRedirectStop } from '../todo-continuation/index.js';
 import { TODO_CONTINUATION_PROMPT } from '../../installer/hooks.js';
@@ -671,9 +671,14 @@ function normalizeReviewerPath(subagentType) {
     }
     return null;
 }
-function isCodexReviewerCommand(command) {
-    return typeof command === 'string'
-        && /\bask\s+codex\s+--agent-prompt\s+critic\b/i.test(command);
+const EXTERNAL_REVIEWER_COMMAND_PATTERN = new RegExp(`\\bask\\s+(${Object.keys(RALPH_EXTERNAL_CRITIC_LABELS).join('|')})\\s+--agent-prompt\\s+critic\\b`, 'i');
+/** The external critic (`omc ask <codex|muse|grok> --agent-prompt critic`) a Bash command runs, if any. */
+function externalReviewerFromCommand(command) {
+    if (typeof command !== 'string') {
+        return null;
+    }
+    const match = EXTERNAL_REVIEWER_COMMAND_PATTERN.exec(command);
+    return match ? match[1].toLowerCase() : null;
 }
 function extractTranscriptText(content) {
     if (typeof content === 'string') {
@@ -722,8 +727,9 @@ function checkReviewerAuthoredApprovalInMessages(transcriptPath, verificationSta
                 }
                 if (REVIEWER_COMMAND_TOOL_NAMES.has(block.name)) {
                     const command = block.input?.command;
-                    if (isCodexReviewerCommand(command) && matchesVerificationReviewerPath('codex', verificationState)) {
-                        reviewerToolUses.set(block.id, 'codex');
+                    const externalReviewer = externalReviewerFromCommand(command);
+                    if (externalReviewer && matchesVerificationReviewerPath(externalReviewer, verificationState)) {
+                        reviewerToolUses.set(block.id, externalReviewer);
                     }
                 }
                 continue;
@@ -1037,11 +1043,7 @@ async function checkRalphLoop(sessionId, directory, cancelInProgress) {
                                 mode: 'ralph',
                             };
                         }
-                        const criticLabel = criticMode === 'codex'
-                            ? 'Codex critic'
-                            : criticMode === 'critic'
-                                ? 'Critic'
-                                : 'Architect';
+                        const criticLabel = getCriticLabel(criticMode);
                         return {
                             shouldBlock: false,
                             message: `[RALPH LOOP VERIFIED COMPLETE] ${criticLabel} verified task completion after ${state.iteration} iteration(s). Excellent work!`,
@@ -1196,7 +1198,7 @@ CRITICAL INSTRUCTIONS:
 1. Review your progress and the original task
 ${prdInstruction}
 3. Continue from where you left off
-4. When FULLY complete (after ${state.critic_mode === 'codex' ? 'Codex critic' : state.critic_mode === 'critic' ? 'Critic' : 'Architect'} verification), run \`/oh-my-claudecode:cancel\` to cleanly exit and clean up state files. If cancel fails, report the failure and retry within the same session scope. Cancel all sessions only when the user explicitly requests \`--all\`.
+4. When FULLY complete (after ${getCriticLabel(state.critic_mode)} verification), run \`/oh-my-claudecode:cancel\` to cleanly exit and clean up state files. If cancel fails, report the failure and retry within the same session scope. Cancel all sessions only when the user explicitly requests \`--all\`.
 5. Do NOT stop until the task is truly done
 
 ${newState.prompt ? `Original task: ${truncatePromptForEcho(newState.prompt)}` : ''}

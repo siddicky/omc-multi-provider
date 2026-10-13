@@ -67,8 +67,19 @@ export interface RalphLoopState {
   critic_mode?: RalphCriticMode;
 }
 
-export const RALPH_CRITIC_MODES = ['architect', 'critic', 'codex'] as const;
+export const RALPH_CRITIC_MODES = ['architect', 'critic', 'codex', 'muse', 'grok'] as const;
 export type RalphCriticMode = typeof RALPH_CRITIC_MODES[number];
+
+/**
+ * Critic modes that run an external CLI via `omc ask <mode> --agent-prompt critic`, with display labels.
+ * Keep in sync with EXTERNAL_CRITIC_PROVIDERS in src/features/builtin-skills/runtime-guidance.ts.
+ */
+export const RALPH_EXTERNAL_CRITIC_LABELS = {
+  codex: 'Codex',
+  muse: 'Muse',
+  grok: 'Grok',
+} as const satisfies Partial<Record<RalphCriticMode, string>>;
+export type RalphExternalCriticMode = keyof typeof RALPH_EXTERNAL_CRITIC_LABELS;
 
 /**
  * The startup line that makes the feedback gate non-optional for executors

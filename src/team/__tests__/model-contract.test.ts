@@ -282,6 +282,25 @@ describe('model-contract', () => {
       }
     });
 
+    it('reports muse unavailable (by throwing) when external LLM is disabled', async () => {
+      const origSecurity = process.env.OMC_SECURITY;
+      process.env.OMC_SECURITY = 'strict';
+      try {
+        const { clearSecurityConfigCache } = await import('../../lib/security-config.js');
+        clearSecurityConfigCache();
+        const { isMuseCliAvailable } = await import('../model-contract.js');
+        expect(() => isMuseCliAvailable()).toThrow('blocked by security policy');
+      } finally {
+        if (origSecurity === undefined) {
+          delete process.env.OMC_SECURITY;
+        } else {
+          process.env.OMC_SECURITY = origSecurity;
+        }
+        const { clearSecurityConfigCache } = await import('../../lib/security-config.js');
+        clearSecurityConfigCache();
+      }
+    });
+
     it('blocks grok when external LLM is disabled', async () => {
       const origSecurity = process.env.OMC_SECURITY;
       process.env.OMC_SECURITY = 'strict';

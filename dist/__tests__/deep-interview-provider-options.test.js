@@ -6,6 +6,7 @@ const availability = vi.hoisted(() => ({
 }));
 vi.mock('../team/model-contract.js', () => ({
     isCliAvailable: (agentType) => availability[agentType],
+    isMuseCliAvailable: () => false,
 }));
 import { clearSkillsCache, getBuiltinSkill } from '../features/builtin-skills/skills.js';
 import { renderSkillRuntimeGuidance } from '../features/builtin-skills/runtime-guidance.js';

@@ -109,6 +109,12 @@ describe('Ralph PRD-Mandatory', () => {
       expect(detectCriticModeFlag('ralph --critic codex fix this')).toBe('codex');
     });
 
+    it('detects --critic=muse and --critic grok', () => {
+      expect(detectCriticModeFlag('ralph --critic=muse fix this')).toBe('muse');
+      expect(detectCriticModeFlag('ralph --critic grok fix this')).toBe('grok');
+      expect(detectCriticModeFlag('ralph --critic=GROK fix this')).toBe('grok');
+    });
+
     it('returns null for invalid critic mode', () => {
       expect(detectCriticModeFlag('ralph --critic=gemini fix this')).toBeNull();
     });
@@ -121,6 +127,11 @@ describe('Ralph PRD-Mandatory', () => {
 
     it('removes --critic codex', () => {
       expect(stripCriticModeFlag('ralph --critic codex fix this')).toBe('ralph fix this');
+    });
+
+    it('removes --critic=muse and --critic grok', () => {
+      expect(stripCriticModeFlag('ralph --critic=muse fix this')).toBe('ralph fix this');
+      expect(stripCriticModeFlag('ralph --critic grok fix this')).toBe('ralph fix this');
     });
   });
 
@@ -399,6 +410,23 @@ describe('Ralph PRD-Mandatory', () => {
       expect(prompt).toContain('<ralph-approved critic="codex" request-id="req-codex">VERIFIED_COMPLETE</ralph-approved>');
     });
 
+    it.each([
+      ['muse', 'MUSE', 'Muse'],
+      ['grok', 'GROK', 'Grok'],
+    ] as const)('should support %s verification prompts through omc ask', (mode, upper, label) => {
+      const prompt = getArchitectVerificationPrompt({
+        ...baseVerificationState,
+        critic_mode: mode,
+        request_id: `req-${mode}`,
+      });
+
+      expect(prompt).toContain(`[${upper} CRITIC VERIFICATION REQUIRED`);
+      expect(prompt).toContain(`Run an external ${label} critic review`);
+      expect(prompt).toContain(`omc ask ${mode} --agent-prompt critic`);
+      expect(prompt).not.toContain('omc ask codex');
+      expect(prompt).toContain(`<ralph-approved critic="${mode}" request-id="req-${mode}">VERIFIED_COMPLETE</ralph-approved>`);
+    });
+
     it('detects generic Ralph approval markers', () => {
       expect(detectArchitectApproval('<ralph-approved critic="codex">VERIFIED_COMPLETE</ralph-approved>')).toBe(true);
     });
@@ -427,6 +455,11 @@ describe('Ralph PRD-Mandatory', () => {
       const result = detectArchitectRejection('Codex reviewer found issues: Missing tests.');
       expect(result.rejected).toBe(true);
       expect(result.feedback).toContain('Missing tests');
+    });
+
+    it('detects muse- and grok-style rejection language', () => {
+      expect(detectArchitectRejection('Muse rejected the completion claim.').rejected).toBe(true);
+      expect(detectArchitectRejection('Grok says the work is incomplete.').rejected).toBe(true);
     });
   });
 

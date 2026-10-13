@@ -32,8 +32,18 @@ export interface RalphLoopState {
     /** Reviewer mode for Ralph completion verification */
     critic_mode?: RalphCriticMode;
 }
-export declare const RALPH_CRITIC_MODES: readonly ["architect", "critic", "codex"];
+export declare const RALPH_CRITIC_MODES: readonly ["architect", "critic", "codex", "muse", "grok"];
 export type RalphCriticMode = typeof RALPH_CRITIC_MODES[number];
+/**
+ * Critic modes that run an external CLI via `omc ask <mode> --agent-prompt critic`, with display labels.
+ * Keep in sync with EXTERNAL_CRITIC_PROVIDERS in src/features/builtin-skills/runtime-guidance.ts.
+ */
+export declare const RALPH_EXTERNAL_CRITIC_LABELS: {
+    readonly codex: "Codex";
+    readonly muse: "Muse";
+    readonly grok: "Grok";
+};
+export type RalphExternalCriticMode = keyof typeof RALPH_EXTERNAL_CRITIC_LABELS;
 /**
  * The startup line that makes the feedback gate non-optional for executors
  * (#45). Skill text alone lost to executor improvisation in live smokes; this

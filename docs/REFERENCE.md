@@ -589,6 +589,7 @@ omc ask codex "review this patch from a security perspective"
 omc ask gemini --prompt "suggest UX improvements"
 omc ask antigravity --prompt "suggest UX improvements"
 omc ask cursor --prompt "apply this implementation plan"
+omc ask muse --agent-prompt critic --prompt "review this plan"
 omc ask claude --agent-prompt executor --prompt "create an implementation plan"
 ```
 
@@ -596,7 +597,7 @@ omc ask claude --agent-prompt executor --prompt "create an implementation plan"
 - Artifacts: `.omc/artifacts/ask/{provider}-{slug}-{timestamp}.md`
 - Canonical env vars: `OMC_ASK_ADVISOR_SCRIPT`, `OMC_ASK_ORIGINAL_TASK`
 - Phase-1 aliases (deprecated warning): `OMX_ASK_ADVISOR_SCRIPT`, `OMX_ASK_ORIGINAL_TASK`
-- Skill entrypoint: `/oh-my-claudecode:ask <claude|codex|gemini|antigravity|grok|cursor> <prompt>` routes to this command
+- Skill entrypoint: `/oh-my-claudecode:ask <claude|codex|gemini|antigravity|grok|cursor|muse> <prompt>` routes to this command
 
 ### `omc team` (CLI runtime surface)
 
@@ -1043,7 +1044,7 @@ Most installed skills are exposed as `/oh-my-claudecode:<registered-name>`. The 
 | `/oh-my-claudecode:pr`                                   | Assemble a PR body from existing paper-trail evidence                                           |
 | `/oh-my-claudecode:project-session-manager <arguments>`  | Manage isolated dev environments with git worktrees + tmux                                    |
 | `/oh-my-claudecode:psm <arguments>`                      | Deprecated alias for project session manager                                                  |
-| `/oh-my-claudecode:ralph <task>`                         | Persistence loop until task completion (`--critic=architect \| critic \| codex`)             |
+| `/oh-my-claudecode:ralph <task>`                         | Persistence loop until task completion (`--critic=architect \| critic \| codex \| muse \| grok`) |
 | `/oh-my-claudecode:ralplan <description>`                | Iterative planning with consensus structured deliberation                                     |
 | `/oh-my-claudecode:release`                              | Automated release workflow                                                                    |
 | `/oh-my-claudecode:refit [--scope <area>] [--last <N sessions>]` | Retrospect on OMC instrumentation and propose user-approved environment fixes            |
