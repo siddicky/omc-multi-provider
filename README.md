@@ -2,6 +2,12 @@ English | [한국어](README.ko.md) | [中文](README.zh.md) | [日本語](READM
 
 # oh-my-claudecode
 
+> **omc-multi-provider** — a fork of [oh-my-claudecode](https://github.com/Yeachan-Heo/oh-my-claudecode) v5.7.1 (MIT, © Yeachan Heo) that adds **Muse** and **Grok** as external critics alongside Codex:
+> `/ralplan --critic codex|muse|grok`, `/plan --critic codex|muse|grok`, `/ralph --critic=codex|muse|grok`, and `omc ask muse`.
+> It also fixes `omc ask grok --agent-prompt critic` (grok rejected the role file's `---` frontmatter as a `-p` value; muse and grok now receive the prompt via a private temp `--prompt-file`).
+> Install it in place of upstream oh-my-claudecode (Quick Start below); everything else is upstream oh-my-claudecode.
+
+
 [![npm version](https://img.shields.io/npm/v/oh-my-claude-sisyphus?color=cb3837)](https://www.npmjs.com/package/oh-my-claude-sisyphus)
 [![npm downloads](https://img.shields.io/npm/dm/oh-my-claude-sisyphus?color=blue)](https://www.npmjs.com/package/oh-my-claude-sisyphus)
 [![GitHub stars](https://img.shields.io/github/stars/Yeachan-Heo/oh-my-claudecode?style=flat&color=yellow)](https://github.com/Yeachan-Heo/oh-my-claudecode/stargazers)
@@ -58,19 +64,27 @@ Marketplace/plugin install (recommended for most Claude Code users).
 These are Claude Code slash commands — enter them **one at a time** (pasting both lines at once will fail):
 
 ```bash
-/plugin marketplace add https://github.com/Yeachan-Heo/oh-my-claudecode
+/plugin marketplace add https://github.com/siddicky/omc-multi-provider
 ```
 
 Then:
 
 ```bash
-/plugin install oh-my-claudecode
+/plugin install oh-my-claudecode@omc
 ```
 
-If you prefer the npm CLI/runtime path instead of the marketplace flow:
+> **This fork replaces upstream oh-my-claudecode — don't install both.** Both use the
+> marketplace name `omc` and the plugin name `oh-my-claudecode`, so if upstream is already
+> installed, remove it first: `claude plugin marketplace remove omc`.
+> Muse and Grok critics need the `muse` (Muse Code) and [`grok`](https://build.grok.com) CLIs
+> on your `PATH` (`muse --version`, `grok --version`).
+
+If you prefer the npm CLI/runtime path instead of the marketplace flow (or already have
+upstream's global `omc`, which skills prefer over the plugin's bundled CLI and which does
+not know `muse`), install this fork's CLI from its GitHub tarball:
 
 ```bash
-npm i -g oh-my-claude-sisyphus@latest
+npm i -g https://github.com/siddicky/omc-multi-provider/tarball/main
 ```
 
 > **Known npm warning:** npm may print `deprecated prebuild-install@7.1.3` during the CLI install.
